@@ -6,17 +6,14 @@ import androidx.appcompat.app.AppCompatActivity;
 import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
-import android.graphics.Camera;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
-import android.hardware.camera2.CameraMetadata;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.params.StreamConfigurationMap;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -48,22 +45,41 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void onDisconnected(@NonNull CameraDevice camera) {
-            cameraDevice.close();
-            cameraDevice = null;
+            closeCamera();
         }
 
         @Override
         public void onError(@NonNull CameraDevice camera, int error) {
-            cameraDevice.close();
-            cameraDevice = null;
+            closeCamera();
         }
     };
 
-    TextureView.SurfaceTextureListener surfaceTextureListener;
-    int cameraFacing;
-    CameraCaptureSession mcameraCaptureSession;
+    TextureView.SurfaceTextureListener surfaceTextureListener = new TextureView.SurfaceTextureListener() {
+        @Override
+        public void onSurfaceTextureAvailable(SurfaceTexture surfaceTexture, int width, int height) {
+            setupCamera();
+            openCamera();
+        }
+
+        @Override
+        public void onSurfaceTextureSizeChanged(SurfaceTexture surfaceTexture, int width, int height) {
+
+        }
+
+        @Override
+        public boolean onSurfaceTextureDestroyed(SurfaceTexture surfaceTexture) {
+            return false;
+        }
+
+        @Override
+        public void onSurfaceTextureUpdated(SurfaceTexture surfaceTexture) {
+
+        }
+    };
+
+    int cameraFacing = CameraCharacteristics.LENS_FACING_BACK;
+    CameraCaptureSession cameraCaptureSession;
     CaptureRequest.Builder captureRequestBuilder;
-    private CaptureRequest captureRequest;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -72,89 +88,39 @@ public class MainActivity extends AppCompatActivity {
 
         textureView = findViewById(R.id.texture_view);
         button = findViewById(R.id.fab_take_photo);
-//        setupCamera();
-        requestPermissions(new String[]{Manifest.permission.CAMERA}, CAMERA_REQUEST_CODE);
-
         cameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
-        cameraFacing = CameraCharacteristics.LENS_FACING_BACK;
-
-        surfaceTextureListener = new TextureView.SurfaceTextureListener() {
-            @Override
-            public void onSurfaceTextureAvailable(SurfaceTexture surfaceTexture, int width, int height) {
-                setupCamera();
-                openCamera();
-            }
-
-            @Override
-            public void onSurfaceTextureSizeChanged(SurfaceTexture surfaceTexture, int width, int height) {
-
-            }
-
-            @Override
-            public boolean onSurfaceTextureDestroyed(SurfaceTexture surfaceTexture) {
-                return false;
-            }
-
-            @Override
-            public void onSurfaceTextureUpdated(SurfaceTexture surfaceTexture) {
-
-            }
-        };
     }
 
 
     @Override
     protected void onResume() {
         super.onResume();
-        openBackgroundHandler();
+        openBackgroundThread();
         if (textureView.isAvailable()) {
             setupCamera();
             openCamera();
         } else {
             textureView.setSurfaceTextureListener(surfaceTextureListener);
         }
-//        textureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
-//            @Override
-//            public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
-////                openBackgroundHandler();
-//                setupCamera();
-//                openCamera();
-//            }
-//
-//            @Override
-//            public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
-//
-//            }
-//
-//            @Override
-//            public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
-//                return false;
-//            }
-//
-//            @Override
-//            public void onSurfaceTextureUpdated(SurfaceTexture surface) {
-//
-//            }
-//        });
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        closeBackgroundHandler();
+        closeBackgroundThread();
     }
 
     @Override
     protected void onStop() {
         super.onStop();
         closeCamera();
-        closeBackgroundHandler();
+        closeBackgroundThread();
     }
 
     private void setupCamera() {
-//        cameraManager = (CameraManager) getSystemService(CAMERA_SERVICE);
         try {
             String[] cameraIds = cameraManager.getCameraIdList();
+            System.out.println(cameraIds);
             for (String cameraId: cameraIds) {
                 CameraCharacteristics cameraCharacteristics =
                         cameraManager.getCameraCharacteristics(cameraId);
@@ -172,27 +138,24 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void openCamera() {
-        // check perms
-//        if (Build.VERSION.SDK_INT >= 23) {
-            if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_DENIED) {
-                requestPermissions(new String[]{Manifest.permission.CAMERA}, CAMERA_REQUEST_CODE);
-            } else {
-                try {
-                    cameraManager.openCamera(cameraId, stateCallback, backgroundHandler);
-                } catch (CameraAccessException e) {
-                    e.printStackTrace();
-                }
+        if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_DENIED) {
+            requestPermissions(new String[]{Manifest.permission.CAMERA}, CAMERA_REQUEST_CODE);
+        } else {
+            try {
+                cameraManager.openCamera(cameraId, stateCallback, backgroundHandler);
+            } catch (CameraAccessException e) {
+                e.printStackTrace();
             }
-//        }
+        }
     }
 
-    private void openBackgroundHandler() {
+    private void openBackgroundThread() {
         handlerThread = new HandlerThread("camera_thread");
         handlerThread.start();
         backgroundHandler = new Handler(handlerThread.getLooper());
     }
 
-    private void closeBackgroundHandler() {
+    private void closeBackgroundThread() {
         if (backgroundHandler != null) {
             handlerThread.quitSafely();
             handlerThread = null;
@@ -201,9 +164,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void closeCamera() {
-        if (mcameraCaptureSession != null) {
-            mcameraCaptureSession.close();
-            mcameraCaptureSession = null;
+        if (cameraCaptureSession != null) {
+            cameraCaptureSession.close();
+            cameraCaptureSession = null;
         }
 
         if (cameraDevice != null) {
@@ -213,31 +176,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void createCaptureSession() {
-//        SurfaceTexture surfaceTexture = textureView.getSurfaceTexture();
-//        surfaceTexture.setDefaultBufferSize(size.getWidth(), size.getHeight());
-//        Surface surface = new Surface(surfaceTexture);
-//
-//        try {
-//            cameraDevice.createCaptureSession(Collections.singletonList(surface), new CameraCaptureSession.StateCallback() {
-//                @Override
-//                public void onConfigured(@NonNull CameraCaptureSession session) {
-//                    try {
-//                        CaptureRequest.Builder captureRequestBuilder =
-//                                cameraDevice.createCaptureRequest(cameraDevice.TEMPLATE_PREVIEW);
-//                        session.setRepeatingRequest(captureRequestBuilder.build(), null, backgroundHandler);
-//                    } catch (CameraAccessException e) {
-//                        e.printStackTrace();
-//                    }
-//                }
-//
-//                @Override
-//                public void onConfigureFailed(@NonNull CameraCaptureSession session) {
-//
-//                }
-//            }, backgroundHandler);
-//        } catch (CameraAccessException e) {
-//            e.printStackTrace();
-//        }
         try {
             SurfaceTexture surfaceTexture = textureView.getSurfaceTexture();
             surfaceTexture.setDefaultBufferSize(size.getWidth(), size.getHeight());
@@ -255,9 +193,9 @@ public class MainActivity extends AppCompatActivity {
                             }
 
                             try {
-                                captureRequest = captureRequestBuilder.build();
-                                mcameraCaptureSession = cameraCaptureSession;
-                                mcameraCaptureSession.setRepeatingRequest(captureRequest,
+                                CaptureRequest captureRequest = captureRequestBuilder.build();
+                                MainActivity.this.cameraCaptureSession = cameraCaptureSession;
+                                MainActivity.this.cameraCaptureSession.setRepeatingRequest(captureRequest,
                                         null, backgroundHandler);
                             } catch (CameraAccessException e) {
                                 e.printStackTrace();
