@@ -17,6 +17,7 @@ import android.hardware.camera2.params.StreamConfigurationMap;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.util.Log;
 import android.util.Size;
 import android.view.Surface;
 import android.view.TextureView;
@@ -94,6 +95,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onResume() {
+        System.out.println("onResume");
         super.onResume();
         openBackgroundThread();
         if (textureView.isAvailable()) {
@@ -107,12 +109,15 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         super.onPause();
+        System.out.println("onPause");
+        closeCamera();
         closeBackgroundThread();
     }
 
     @Override
     protected void onStop() {
         super.onStop();
+        System.out.println("onStop");
         closeCamera();
         closeBackgroundThread();
     }
@@ -120,8 +125,8 @@ public class MainActivity extends AppCompatActivity {
     private void setupCamera() {
         try {
             String[] cameraIds = cameraManager.getCameraIdList();
-            System.out.println(cameraIds);
             for (String cameraId: cameraIds) {
+                System.out.println("camid " + cameraId);
                 CameraCharacteristics cameraCharacteristics =
                         cameraManager.getCameraCharacteristics(cameraId);
                 if (cameraCharacteristics.get(CameraCharacteristics.LENS_FACING) == cameraFacing) {
@@ -129,6 +134,7 @@ public class MainActivity extends AppCompatActivity {
                     StreamConfigurationMap streamConfigurationMap = cameraCharacteristics.get(
                             CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
                     size = streamConfigurationMap.getOutputSizes(SurfaceTexture.class)[0];
+                    System.out.println("set as camera " + cameraId);
                 }
             }
 
@@ -182,12 +188,13 @@ public class MainActivity extends AppCompatActivity {
             Surface previewSurface = new Surface(surfaceTexture);
             captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
             captureRequestBuilder.addTarget(previewSurface);
+            captureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_OFF);
 
             cameraDevice.createCaptureSession(Collections.singletonList(previewSurface),
                     new CameraCaptureSession.StateCallback() {
 
                         @Override
-                        public void onConfigured(CameraCaptureSession cameraCaptureSession) {
+                        public void onConfigured(@NonNull CameraCaptureSession cameraCaptureSession) {
                             if (cameraDevice == null) {
                                 return;
                             }
@@ -195,15 +202,15 @@ public class MainActivity extends AppCompatActivity {
                             try {
                                 CaptureRequest captureRequest = captureRequestBuilder.build();
                                 MainActivity.this.cameraCaptureSession = cameraCaptureSession;
-                                MainActivity.this.cameraCaptureSession.setRepeatingRequest(captureRequest,
-                                        null, backgroundHandler);
+                                MainActivity.this.cameraCaptureSession.setRepeatingRequest(
+                                        captureRequest, null, backgroundHandler);
                             } catch (CameraAccessException e) {
                                 e.printStackTrace();
                             }
                         }
 
                         @Override
-                        public void onConfigureFailed(CameraCaptureSession cameraCaptureSession) {
+                        public void onConfigureFailed(@NonNull CameraCaptureSession cameraCaptureSession) {
 
                         }
                     }, backgroundHandler);
